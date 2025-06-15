@@ -100,7 +100,7 @@ async def yardım(interaction: discord.Interaction):
         embed.add_field(name="/premiumgenekle", value="Premium hesap ekle", inline=True)
         embed.add_field(name="/freegensil", value="Free stokları sil", inline=True)
         embed.add_field(name="/premiumgensil", value="Premium stokları sil", inline=True)
-        embed.add_field(name="/dosyaileekle", value="Toplu hesap ekle (.txt)", inline=True)
+        embed.add_field(name="/dosyaileekle", value="Dosyadan toplu hesap ekle", inline=True)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @tree.command(name="freegenekle", description="Free hesap ekler (admin).")
@@ -135,14 +135,19 @@ async def premiumgensil(interaction: discord.Interaction, platform: str):
     premium_stock[platform] = []
     await interaction.response.send_message(f"🗑️ Premium stok temizlendi: {platform}", ephemeral=True)
 
-@tree.command(name="dosyaileekle", description="Free hesapları toplu olarak dosya ile ekle (sadece admin).")
-async def dosyaileekle(interaction: discord.Interaction, platform: str, dosya: discord.Attachment):
+@tree.command(name="dosyaileekle", description="Free veya Premium hesapları dosya ile ekle (admin).")
+@app_commands.describe(platform="Platform ismi (örnek: steam)", tip="free ya da premium", dosya="Hesapları içeren .txt dosyası")
+async def dosyaileekle(interaction: discord.Interaction, platform: str, tip: str, dosya: discord.Attachment):
     if interaction.user.id not in AUTHORIZED_ADMINS:
         await interaction.response.send_message("❌ Bu komut sadece adminler içindir.", ephemeral=True)
         return
 
+    if tip not in ["free", "premium"]:
+        await interaction.response.send_message("❌ 'tip' parametresi sadece 'free' veya 'premium' olabilir.", ephemeral=True)
+        return
+
     if not dosya.filename.endswith(".txt"):
-        await interaction.response.send_message("❌ Lütfen bir .txt dosyası yükleyin.", ephemeral=True)
+        await interaction.response.send_message("❌ Lütfen bir `.txt` dosyası yükleyin.", ephemeral=True)
         return
 
     content = await dosya.read()
@@ -156,12 +161,17 @@ async def dosyaileekle(interaction: discord.Interaction, platform: str, dosya: d
     for line in lines:
         line = line.strip()
         if line:
-            free_stock.setdefault(platform, []).append(line)
+            if tip == "free":
+                free_stock.setdefault(platform, []).append(line)
+            else:
+                premium_stock.setdefault(platform, []).append(line)
             sayac += 1
 
-    await interaction.response.send_message(f"✅ {sayac} adet hesap başarıyla {platform} free stock'a eklendi.", ephemeral=True)
+    await interaction.response.send_message(
+        f"✅ {sayac} adet hesap başarıyla **{platform}** → **{tip}** stoklarına eklendi.",
+        ephemeral=True
+    )
 
-# ✅ Slash komutların çalışması için bu şart!
 @bot.event
 async def on_ready():
     await tree.sync()
