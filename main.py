@@ -6,8 +6,9 @@ from discord.ext import commands
 import time
 import random
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # dotenv'i ekledik
 
+# .env dosyasını yükle
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -43,46 +44,40 @@ async def log_message(interaction, message):
 
 @tree.command(name="freegen", description="Free hesap alırsın.")
 async def freegen(interaction: discord.Interaction, platform: str):
-    try:
-        now = time.time()
-        user_id = interaction.user.id
+    now = time.time()
+    user_id = interaction.user.id
 
-        if user_id not in AUTHORIZED_ADMINS:
-            if user_id in last_used and now - last_used[user_id] < 600:
-                remaining = int(600 - (now - last_used[user_id]))
-                await interaction.response.send_message(f"⏳ {remaining} saniye beklemelisin.", ephemeral=True)
-                return
-            last_used[user_id] = now
+    if user_id not in AUTHORIZED_ADMINS:
+        if user_id in last_used and now - last_used[user_id] < 600:
+            remaining = int(600 - (now - last_used[user_id]))
+            await interaction.response.send_message(f"⏳ {remaining} saniye beklemelisin.", ephemeral=True)
+            return
+        last_used[user_id] = now
 
-        if free_stock.get(platform):
-            hesap = random.choice(free_stock[platform])
-            await interaction.user.send(f"🔓 Free {platform} hesabın: `{hesap}`")
-            await interaction.response.send_message("✅ Hesabın DM'den gönderildi.", ephemeral=True)
-            kullanim_gecmisi.setdefault(user_id, []).append(hesap)
-            await log_message(interaction, f"📤 {interaction.user} kişisine Free {platform} hesabı gönderildi: `{hesap}`")
-        else:
-            await interaction.response.send_message("⚠️ Stokta hesap yok.", ephemeral=True)
-    except Exception as e:
-        print(f"[freegen HATA] {e}")
+    if free_stock.get(platform):
+        hesap = random.choice(free_stock[platform])
+        await interaction.user.send(f"🔓 Free {platform} hesabın: `{hesap}`")
+        await interaction.response.send_message("✅ Hesabın DM'den gönderildi.", ephemeral=True)
+        kullanim_gecmisi.setdefault(user_id, []).append(hesap)
+        await log_message(interaction, f"📤 {interaction.user} kişisine Free {platform} hesabı gönderildi: `{hesap}`")
+    else:
+        await interaction.response.send_message("⚠️ Stokta hesap yok.", ephemeral=True)
 
 @tree.command(name="premiumgen", description="Premium hesap alırsın (Premium rolün olmalı).")
 async def premiumgen(interaction: discord.Interaction, platform: str):
-    try:
-        premium_role = discord.utils.get(interaction.guild.roles, name="Premium")
-        if premium_role not in interaction.user.roles and not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Bu komutu sadece Premium üyeler veya adminler kullanabilir.", ephemeral=True)
-            return
+    premium_role = discord.utils.get(interaction.guild.roles, name="Premium")
+    if premium_role not in interaction.user.roles and not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Bu komutu sadece Premium üyeler veya adminler kullanabilir.", ephemeral=True)
+        return
 
-        if premium_stock.get(platform):
-            hesap = random.choice(premium_stock[platform])
-            premium_stock[platform].remove(hesap)
-            await interaction.user.send(f"🔐 Premium {platform} hesabın: `{hesap}`")
-            await interaction.response.send_message("✅ Hesabın DM'den gönderildi.", ephemeral=True)
-            await log_message(interaction, f"📤 {interaction.user} kişisine Premium {platform} hesabı gönderildi ve stoktan silindi: `{hesap}`")
-        else:
-            await interaction.response.send_message("⚠️ Premium stokta hesap yok.", ephemeral=True)
-    except Exception as e:
-        print(f"[premiumgen HATA] {e}")
+    if premium_stock.get(platform):
+        hesap = random.choice(premium_stock[platform])
+        premium_stock[platform].remove(hesap)
+        await interaction.user.send(f"🔐 Premium {platform} hesabın: `{hesap}`")
+        await interaction.response.send_message("✅ Hesabın DM'den gönderildi.", ephemeral=True)
+        await log_message(interaction, f"📤 {interaction.user} kişisine Premium {platform} hesabı gönderildi ve stoktan silindi: `{hesap}`")
+    else:
+        await interaction.response.send_message("⚠️ Premium stokta hesap yok.", ephemeral=True)
 
 @tree.command(name="stoklar", description="Mevcut stokları gösterir.")
 async def stoklar(interaction: discord.Interaction):
@@ -106,7 +101,7 @@ async def yardım(interaction: discord.Interaction):
         embed.add_field(name="/premiumgenekle", value="Premium hesap ekle", inline=True)
         embed.add_field(name="/freegensil", value="Free stokları sil", inline=True)
         embed.add_field(name="/premiumgensil", value="Premium stokları sil", inline=True)
-        embed.add_field(name="/dosyaileekle", value="TXT dosyasıyla hesap ekle", inline=True)
+        embed.add_field(name="/dosyaileekle", value="TXT dosyasından hesap ekle", inline=True)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @tree.command(name="freegenekle", description="Free hesap ekler (admin).")
@@ -141,22 +136,35 @@ async def premiumgensil(interaction: discord.Interaction, platform: str):
     premium_stock[platform] = []
     await interaction.response.send_message(f"🗑️ Premium stok temizlendi: {platform}", ephemeral=True)
 
+# ✅ BURADA: dosya ile hesap ekleme komutu
 @tree.command(name="dosyaileekle", description="TXT dosyasından hesap ekler (admin).")
+@app_commands.describe(platform="Platform ismi (örnek: steam)", dosya="TXT uzantılı hesap listesi dosyası")
 async def dosyaileekle(interaction: discord.Interaction, platform: str, dosya: discord.Attachment):
     if interaction.user.id not in AUTHORIZED_ADMINS:
         await interaction.response.send_message("❌ Admin yetkin yok.", ephemeral=True)
         return
 
     if not dosya.filename.endswith(".txt"):
-        await interaction.response.send_message("❌ Sadece .txt dosyası kabul edilir.", ephemeral=True)
+        await interaction.response.send_message("❌ Sadece `.txt` dosyaları kabul edilir.", ephemeral=True)
         return
 
-    content = await dosya.read()
-    hesaplar = content.decode("utf-8").splitlines()
-    hedef_stok = free_stock if platform.lower() in free_stock else premium_stock
-    hedef_stok.setdefault(platform.lower(), []).extend(hesaplar)
+    await interaction.response.defer(ephemeral=True)
 
-    await interaction.response.send_message(f"✅ {len(hesaplar)} hesap başarıyla eklendi: {platform}", ephemeral=True)
+    try:
+        içerik = await dosya.read()
+        hesaplar = içerik.decode("utf-8").splitlines()
+        eklendi = 0
+
+        for hesap in hesaplar:
+            hesap = hesap.strip()
+            if hesap:
+                free_stock.setdefault(platform, []).append(hesap)
+                eklendi += 1
+
+        await interaction.followup.send(f"✅ `{eklendi}` hesap `{platform}` stokuna eklendi.")
+        await log_message(interaction, f"📁 {interaction.user} tarafından `{eklendi}` hesap dosyadan eklendi: `{platform}`")
+    except Exception as e:
+        await interaction.followup.send(f"⚠️ Hata oluştu: {e}")
 
 @bot.event
 async def on_ready():
