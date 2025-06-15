@@ -1,4 +1,3 @@
-import discord
-import time
-import random
-import os
+discord.py>=2.3.2
+Flask>=2.3.0
+python-dotenv>=1.0.0
