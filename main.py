@@ -1,18 +1,22 @@
 import discord
-from discord.ext import commands
 from discord import app_commands
-import os
-from dotenv import load_dotenv
+from discord.ext import commands
 from flask import Flask
 from threading import Thread
+import os
+import random
+from dotenv import load_dotenv
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-admin_ids = [1284167857231364118, 1230072380467056710]
 
-intents = discord.Intents.all()
+intents = discord.Intents.default()
+intents.messages = True
+intents.guilds = True
+intents.message_content = True
+
 bot = commands.Bot(command_prefix="/", intents=intents)
-tree = app_commands.CommandTree(bot)
+tree = bot.tree
 
 app = Flask('')
 
@@ -27,110 +31,110 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# STOK DOSYALARI
-stock_files = {
-    "free": "free_steam.txt",
-    "premium": "premium_steam.txt"
-}
+keep_alive()
 
-# BOT BAĞLANINCA SYNC
+ADMIN_IDS = [1284167857231364118, 1230072380467056710]
+FREE_CHANNEL_ID = 123456789012345678  # free-gen kanal ID'si
+PREMIUM_CHANNEL_ID = 234567890123456789  # premium-gen kanal ID'si
+
+# Helper fonksiyonlar
+def stok_dosyasi(platform: str, tur: str):
+    return f"stoklar/{tur}_{platform}.txt"
+
+def oku(platform: str, tur: str):
+    try:
+        with open(stok_dosyasi(platform, tur), "r") as f:
+            return f.read().splitlines()
+    except FileNotFoundError:
+        return []
+
+def yaz(platform: str, tur: str, veriler: list):
+    with open(stok_dosyasi(platform, tur), "w") as f:
+        f.write("\n".join(veriler))
+
 @bot.event
 async def on_ready():
     await tree.sync()
     print(f"{bot.user} olarak giriş yapıldı!")
 
-# HESAP GÖNDERME
-@tree.command(name="freegen", description="Free hesap alın.")
-async def freegen(interaction: discord.Interaction):
-    await send_account(interaction, "free")
-
-@tree.command(name="premiumgen", description="Premium hesap alın (Premium rolün olmalı).")
-async def premiumgen(interaction: discord.Interaction):
-    role = discord.utils.get(interaction.user.roles, name="Premium")
-    if not role:
-        return await interaction.response.send_message("❌ Premium rolün yok!", ephemeral=True)
-    await send_account(interaction, "premium")
-
-# HESAP EKLEME
-@tree.command(name="freegenekle", description="Free hesap ekle (admin)")
-async def freegenekle(interaction: discord.Interaction, hesap: str):
-    await add_account(interaction, "free", hesap)
-
-@tree.command(name="premiumgenekle", description="Premium hesap ekle (admin)")
-async def premiumgenekle(interaction: discord.Interaction, hesap: str):
-    await add_account(interaction, "premium", hesap)
-
-# STOKLARI GÖSTERME
-@tree.command(name="stoklar", description="Mevcut hesap stoklarını göster")
-async def stoklar(interaction: discord.Interaction):
-    free_count = count_lines(stock_files["free"])
-    premium_count = count_lines(stock_files["premium"])
-    embed = discord.Embed(title="🔹 Mevcut Stoklar", color=discord.Color.gold())
-    embed.add_field(name="Free - steam", value=f"{free_count} adet")
-    embed.add_field(name="Premium - steam", value=f"{premium_count} adet")
+# Komutlar
+@tree.command(name="yardim", description="Komutları gösterir.")
+async def yardim(interaction: discord.Interaction):
+    embed = discord.Embed(title="VaultKey Yardım Menüsü", color=discord.Color.blue())
+    embed.add_field(name="/freegen", value="Free hesap alırsın.", inline=False)
+    embed.add_field(name="/premiumgen", value="Premium hesap alırsın.", inline=False)
+    embed.add_field(name="/stoklar", value="Stokları görüntülersin.", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# DOSYA İLE EKLEME
-@tree.command(name="dosyaileekle", description=".txt dosyası ile stok ekle (admin)")
-@app_commands.describe(platform="Platform (free/premium)", dosya="Lütfen bir .txt dosyası ekle")
-async def dosyaileekle(interaction: discord.Interaction, platform: str, dosya: discord.Attachment):
-    if interaction.user.id not in admin_ids:
-        return await interaction.response.send_message("❌ Bu komutu kullanma iznin yok.", ephemeral=True)
+@tree.command(name="stoklar", description="Stokları görüntüle.")
+async def stoklar(interaction: discord.Interaction):
+    platformlar = set()
+    for dosya in os.listdir("stoklar"):
+        if "_" in dosya:
+            tur, platform = dosya.replace(".txt", "").split("_")
+            platformlar.add(platform)
+    
+    embed = discord.Embed(title="📦 Mevcut Stoklar", color=discord.Color.orange())
+    for platform in platformlar:
+        free = len(oku(platform, "free"))
+        premium = len(oku(platform, "premium"))
+        embed.add_field(name=f"Free - {platform}", value=f"{free} adet", inline=False)
+        embed.add_field(name=f"Premium - {platform}", value=f"{premium} adet", inline=False)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    if platform not in stock_files:
-        return await interaction.response.send_message("❌ Geçersiz platform (free/premium).", ephemeral=True)
+@tree.command(name="freegen", description="Free hesap alırsın.")
+@app_commands.describe(platform="Platform adı (örneğin: steam)")
+async def freegen(interaction: discord.Interaction, platform: str):
+    if interaction.channel.id != FREE_CHANNEL_ID:
+        await interaction.response.send_message("Bu komut sadece #free-gen kanalında kullanılabilir!", ephemeral=True)
+        return
+
+    stoklar = oku(platform, "free")
+    if not stoklar:
+        await interaction.response.send_message("❌ Stokta hesap kalmamış.", ephemeral=True)
+        return
+
+    secilen = stoklar.pop(0)
+    yaz(platform, "free", stoklar)
+    await interaction.user.send(f"🎁 Free {platform} hesabın: `{secilen}`")
+    await interaction.response.send_message("✅ Hesap DM'den gönderildi!", ephemeral=True)
+
+@tree.command(name="premiumgen", description="Premium hesap alırsın.")
+@app_commands.describe(platform="Platform adı (örneğin: steam)")
+async def premiumgen(interaction: discord.Interaction, platform: str):
+    if interaction.channel.id != PREMIUM_CHANNEL_ID:
+        await interaction.response.send_message("Bu komut sadece #premium-gen kanalında kullanılabilir!", ephemeral=True)
+        return
+
+    stoklar = oku(platform, "premium")
+    if not stoklar:
+        await interaction.response.send_message("❌ Premium stok kalmamış.", ephemeral=True)
+        return
+
+    secilen = stoklar.pop(0)
+    yaz(platform, "premium", stoklar)
+    await interaction.user.send(f"💎 Premium {platform} hesabın: `{secilen}`")
+    await interaction.response.send_message("✅ Premium hesap DM'den gönderildi!", ephemeral=True)
+
+@tree.command(name="dosyaileekle", description="Stoklara dosya ile hesap ekle (admin)")
+@app_commands.describe(platform="Platform adı (örneğin: steam)", dosya="Lütfen bir .txt dosyası yükleyin")
+async def dosyaileekle(interaction: discord.Interaction, platform: str, dosya: discord.Attachment):
+    if interaction.user.id not in ADMIN_IDS:
+        await interaction.response.send_message("❌ Bu komutu kullanma iznin yok.", ephemeral=True)
+        return
 
     if not dosya.filename.endswith(".txt"):
-        return await interaction.response.send_message("❌ Lütfen bir .txt dosyası yükleyin.", ephemeral=True)
+        await interaction.response.send_message("❌ Sadece .txt dosyaları kabul edilir.", ephemeral=True)
+        return
 
-    veri = await dosya.read()
-    metin = veri.decode("utf-8")
-    with open(stock_files[platform], "a", encoding="utf-8") as f:
-        f.write(metin + "\n")
+    icerik = (await dosya.read()).decode("utf-8").splitlines()
 
-    await interaction.response.send_message(f"✅ {platform} stoklarına dosya başarıyla eklendi!", ephemeral=True)
+    tur = "premium" if "premium" in dosya.filename.lower() else "free"
 
-# Yardım komutu
-@tree.command(name="yardim", description="Tüm komutları gösterir.")
-async def yardim(interaction: discord.Interaction):
-    embed = discord.Embed(title="⚙️ Komutlar", color=discord.Color.green())
-    embed.add_field(name="/freegen", value="Free hesap alır.", inline=False)
-    embed.add_field(name="/premiumgen", value="Premium hesap alır. (Premium rol gerekli)", inline=False)
-    embed.add_field(name="/stoklar", value="Stokları gösterir.", inline=False)
-    embed.add_field(name="/freegenekle", value="Free hesap ekler. (Admin)", inline=False)
-    embed.add_field(name="/premiumgenekle", value="Premium hesap ekler. (Admin)", inline=False)
-    embed.add_field(name="/dosyaileekle", value=".txt dosyası ile toplu ekleme. (Admin)", inline=False)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    mevcut = oku(platform, tur)
+    mevcut.extend(icerik)
+    yaz(platform, tur, mevcut)
 
-# DESTEK FONKSİYONLAR
-def count_lines(file):
-    if not os.path.exists(file):
-        return 0
-    with open(file, "r", encoding="utf-8") as f:
-        return sum(1 for _ in f if _.strip())
+    await interaction.response.send_message(f"✅ {len(icerik)} hesap **{platform} ({tur})** stoklarına eklendi!", ephemeral=True)
 
-async def send_account(interaction, platform):
-    file_path = stock_files[platform]
-    if not os.path.exists(file_path) or count_lines(file_path) == 0:
-        return await interaction.response.send_message(f"❌ {platform.capitalize()} stokta hesap yok.", ephemeral=True)
-
-    with open(file_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    account = lines[0].strip()
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.writelines(lines[1:])
-
-    await interaction.user.send(f"✅ İşte {platform} hesabın: `{account}`")
-    await interaction.response.send_message(f"📬 {interaction.user.mention} kişisine {platform} steam hesabı gönderildi ve stoktan silindi: `{account}`", ephemeral=False)
-
-async def add_account(interaction, platform, hesap):
-    if interaction.user.id not in admin_ids:
-        return await interaction.response.send_message("❌ Bu komutu kullanma iznin yok.", ephemeral=True)
-
-    with open(stock_files[platform], "a", encoding="utf-8") as f:
-        f.write(hesap + "\n")
-    await interaction.response.send_message(f"✅ {platform.capitalize()} stoklarına hesap eklendi!", ephemeral=True)
-
-keep_alive()
 bot.run(TOKEN)
