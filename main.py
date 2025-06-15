@@ -6,9 +6,8 @@ from discord.ext import commands
 import time
 import random
 import os
-from dotenv import load_dotenv  # dotenv'i ekledik
+from dotenv import load_dotenv
 
-# .env dosyasını yükle
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -101,7 +100,7 @@ async def yardım(interaction: discord.Interaction):
         embed.add_field(name="/premiumgenekle", value="Premium hesap ekle", inline=True)
         embed.add_field(name="/freegensil", value="Free stokları sil", inline=True)
         embed.add_field(name="/premiumgensil", value="Premium stokları sil", inline=True)
-        embed.add_field(name="/dosyaileekle", value="TXT dosyasından hesap ekle", inline=True)
+        embed.add_field(name="/dosyaileekle", value="Toplu hesap ekle (.txt)", inline=True)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @tree.command(name="freegenekle", description="Free hesap ekler (admin).")
@@ -136,36 +135,33 @@ async def premiumgensil(interaction: discord.Interaction, platform: str):
     premium_stock[platform] = []
     await interaction.response.send_message(f"🗑️ Premium stok temizlendi: {platform}", ephemeral=True)
 
-# ✅ BURADA: dosya ile hesap ekleme komutu
-@tree.command(name="dosyaileekle", description="TXT dosyasından hesap ekler (admin).")
-@app_commands.describe(platform="Platform ismi (örnek: steam)", dosya="TXT uzantılı hesap listesi dosyası")
+@tree.command(name="dosyaileekle", description="Free hesapları toplu olarak dosya ile ekle (sadece admin).")
 async def dosyaileekle(interaction: discord.Interaction, platform: str, dosya: discord.Attachment):
     if interaction.user.id not in AUTHORIZED_ADMINS:
-        await interaction.response.send_message("❌ Admin yetkin yok.", ephemeral=True)
+        await interaction.response.send_message("❌ Bu komut sadece adminler içindir.", ephemeral=True)
         return
 
     if not dosya.filename.endswith(".txt"):
-        await interaction.response.send_message("❌ Sadece `.txt` dosyaları kabul edilir.", ephemeral=True)
+        await interaction.response.send_message("❌ Lütfen bir .txt dosyası yükleyin.", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True)
-
+    content = await dosya.read()
     try:
-        içerik = await dosya.read()
-        hesaplar = içerik.decode("utf-8").splitlines()
-        eklendi = 0
+        lines = content.decode("utf-8").splitlines()
+    except:
+        await interaction.response.send_message("❌ Dosya okunamadı. UTF-8 formatında olduğundan emin olun.", ephemeral=True)
+        return
 
-        for hesap in hesaplar:
-            hesap = hesap.strip()
-            if hesap:
-                free_stock.setdefault(platform, []).append(hesap)
-                eklendi += 1
+    sayac = 0
+    for line in lines:
+        line = line.strip()
+        if line:
+            free_stock.setdefault(platform, []).append(line)
+            sayac += 1
 
-        await interaction.followup.send(f"✅ `{eklendi}` hesap `{platform}` stokuna eklendi.")
-        await log_message(interaction, f"📁 {interaction.user} tarafından `{eklendi}` hesap dosyadan eklendi: `{platform}`")
-    except Exception as e:
-        await interaction.followup.send(f"⚠️ Hata oluştu: {e}")
+    await interaction.response.send_message(f"✅ {sayac} adet hesap başarıyla {platform} free stock'a eklendi.", ephemeral=True)
 
+# ✅ Slash komutların çalışması için bu şart!
 @bot.event
 async def on_ready():
     await tree.sync()
