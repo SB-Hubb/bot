@@ -6,7 +6,8 @@ from discord.ext import commands
 import time
 import random
 import os
-from dotenv import load_dotenv  # dotenv'i ekledik
+import asyncio
+from dotenv import load_dotenv
 
 # .env dosyasını yükle
 load_dotenv()
@@ -101,6 +102,7 @@ async def yardım(interaction: discord.Interaction):
         embed.add_field(name="/premiumgenekle", value="Premium hesap ekle", inline=True)
         embed.add_field(name="/freegensil", value="Free stokları sil", inline=True)
         embed.add_field(name="/premiumgensil", value="Premium stokları sil", inline=True)
+        embed.add_field(name="/dosyaileekle", value="TXT ile toplu hesap yükle", inline=True)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @tree.command(name="freegenekle", description="Free hesap ekler (admin).")
@@ -134,6 +136,37 @@ async def premiumgensil(interaction: discord.Interaction, platform: str):
         return
     premium_stock[platform] = []
     await interaction.response.send_message(f"🗑️ Premium stok temizlendi: {platform}", ephemeral=True)
+
+@tree.command(name="dosyaileekle", description="TXT dosyasından toplu hesap ekler (admin).")
+async def dosyaileekle(interaction: discord.Interaction, platform: str, tür: str):
+    if interaction.user.id not in AUTHORIZED_ADMINS:
+        await interaction.response.send_message("❌ Admin yetkin yok.", ephemeral=True)
+        return
+
+    await interaction.response.send_message("📥 Lütfen .txt dosyasını bu komuttan sonra yükle (30 saniye içinde).", ephemeral=True)
+
+    def check(m):
+        return m.author.id == interaction.user.id and m.attachments and m.attachments[0].filename.endswith(".txt")
+
+    try:
+        msg = await bot.wait_for("message", check=check, timeout=30)
+        attachment = msg.attachments[0]
+        content = await attachment.read()
+        hesaplar = content.decode("utf-8").splitlines()
+        hesaplar = [h.strip() for h in hesaplar if h.strip()]
+
+        if tür.lower() == "free":
+            free_stock.setdefault(platform, []).extend(hesaplar)
+        elif tür.lower() == "premium":
+            premium_stock.setdefault(platform, []).extend(hesaplar)
+        else:
+            await interaction.followup.send("❌ Tür sadece 'free' veya 'premium' olabilir.", ephemeral=True)
+            return
+
+        await interaction.followup.send(f"✅ {len(hesaplar)} hesap başarıyla eklendi ({tür})", ephemeral=True)
+
+    except asyncio.TimeoutError:
+        await interaction.followup.send("⏳ Süre doldu. Lütfen komutu tekrar kullan.", ephemeral=True)
 
 @bot.event
 async def on_ready():
