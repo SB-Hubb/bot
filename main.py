@@ -1,16 +1,18 @@
 from flask import Flask
 from threading import Thread
 import discord
-from discord import app_commands
 from discord.ext import commands
+from discord import app_commands
+import os
 import time
 import random
-import os
 from dotenv import load_dotenv
 
+# Ortam değişkenlerini yükle (.env dosyasından)
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Flask uygulaması (UptimeRobot için)
 app = Flask('')
 
 @app.route('/')
@@ -24,10 +26,15 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-intents = discord.Intents.all()
+# Bot tanımı
+intents = discord.Intents.default()
+intents.messages = True
+intents.guilds = True
+intents.members = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 tree = bot.tree
 
+# Stoklar
 free_stock = {"steam": []}
 premium_stock = {"steam": []}
 last_used = {}
@@ -41,43 +48,50 @@ async def log_message(interaction, message):
     if log_channel:
         await log_channel.send(message)
 
+# /freegen komutu
 @tree.command(name="freegen", description="Free hesap alırsın.")
+@app_commands.describe(platform="Platform ismi (örnek: steam)")
 async def freegen(interaction: discord.Interaction, platform: str):
+    await interaction.response.defer(ephemeral=True)
     now = time.time()
     user_id = interaction.user.id
 
     if user_id not in AUTHORIZED_ADMINS:
         if user_id in last_used and now - last_used[user_id] < 600:
             remaining = int(600 - (now - last_used[user_id]))
-            await interaction.response.send_message(f"⏳ {remaining} saniye beklemelisin.", ephemeral=True)
+            await interaction.followup.send(f"⏳ {remaining} saniye beklemelisin.")
             return
         last_used[user_id] = now
 
     if free_stock.get(platform):
         hesap = random.choice(free_stock[platform])
         await interaction.user.send(f"🔓 Free {platform} hesabın: `{hesap}`")
-        await interaction.response.send_message("✅ Hesabın DM'den gönderildi.", ephemeral=True)
+        await interaction.followup.send("✅ Hesabın DM'den gönderildi.")
         kullanim_gecmisi.setdefault(user_id, []).append(hesap)
         await log_message(interaction, f"📤 {interaction.user} kişisine Free {platform} hesabı gönderildi: `{hesap}`")
     else:
-        await interaction.response.send_message("⚠️ Stokta hesap yok.", ephemeral=True)
+        await interaction.followup.send("⚠️ Stokta hesap yok.")
 
+# /premiumgen komutu
 @tree.command(name="premiumgen", description="Premium hesap alırsın (Premium rolün olmalı).")
+@app_commands.describe(platform="Platform ismi (örnek: steam)")
 async def premiumgen(interaction: discord.Interaction, platform: str):
+    await interaction.response.defer(ephemeral=True)
     premium_role = discord.utils.get(interaction.guild.roles, name="Premium")
     if premium_role not in interaction.user.roles and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ Bu komutu sadece Premium üyeler veya adminler kullanabilir.", ephemeral=True)
+        await interaction.followup.send("❌ Bu komutu sadece Premium üyeler veya adminler kullanabilir.")
         return
 
     if premium_stock.get(platform):
         hesap = random.choice(premium_stock[platform])
         premium_stock[platform].remove(hesap)
         await interaction.user.send(f"🔐 Premium {platform} hesabın: `{hesap}`")
-        await interaction.response.send_message("✅ Hesabın DM'den gönderildi.", ephemeral=True)
+        await interaction.followup.send("✅ Hesabın DM'den gönderildi.")
         await log_message(interaction, f"📤 {interaction.user} kişisine Premium {platform} hesabı gönderildi ve stoktan silindi: `{hesap}`")
     else:
-        await interaction.response.send_message("⚠️ Premium stokta hesap yok.", ephemeral=True)
+        await interaction.followup.send("⚠️ Premium stokta hesap yok.")
 
+# /stoklar komutu
 @tree.command(name="stoklar", description="Mevcut stokları gösterir.")
 async def stoklar(interaction: discord.Interaction):
     embed = discord.Embed(title="📦 Mevcut Stoklar", color=discord.Color.gold())
@@ -87,6 +101,7 @@ async def stoklar(interaction: discord.Interaction):
         embed.add_field(name=f"Premium - {platform}", value=f"{len(hesaplar)} adet", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+# /yardım komutu
 @tree.command(name="yardım", description="Bot komutlarını listeler.")
 async def yardım(interaction: discord.Interaction):
     user_id = interaction.user.id
@@ -103,6 +118,7 @@ async def yardım(interaction: discord.Interaction):
         embed.add_field(name="/dosyaileekle", value="Dosyadan toplu hesap ekle", inline=True)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+# Admin komutları
 @tree.command(name="freegenekle", description="Free hesap ekler (admin).")
 async def freegenekle(interaction: discord.Interaction, platform: str, hesap: str):
     if interaction.user.id not in AUTHORIZED_ADMINS:
@@ -135,6 +151,7 @@ async def premiumgensil(interaction: discord.Interaction, platform: str):
     premium_stock[platform] = []
     await interaction.response.send_message(f"🗑️ Premium stok temizlendi: {platform}", ephemeral=True)
 
+# /dosyaileekle komutu
 @tree.command(name="dosyaileekle", description="Free veya Premium hesapları dosya ile ekle (admin).")
 @app_commands.describe(platform="Platform ismi (örnek: steam)", tip="free ya da premium", dosya="Hesapları içeren .txt dosyası")
 async def dosyaileekle(interaction: discord.Interaction, platform: str, tip: str, dosya: discord.Attachment):
@@ -143,18 +160,18 @@ async def dosyaileekle(interaction: discord.Interaction, platform: str, tip: str
         return
 
     if tip not in ["free", "premium"]:
-        await interaction.response.send_message("❌ 'tip' parametresi sadece 'free' veya 'premium' olabilir.", ephemeral=True)
+        await interaction.response.send_message("❌ 'tip' sadece 'free' ya da 'premium' olabilir.", ephemeral=True)
         return
 
     if not dosya.filename.endswith(".txt"):
-        await interaction.response.send_message("❌ Lütfen bir `.txt` dosyası yükleyin.", ephemeral=True)
+        await interaction.response.send_message("❌ Lütfen `.txt` uzantılı dosya yükleyin.", ephemeral=True)
         return
 
     content = await dosya.read()
     try:
         lines = content.decode("utf-8").splitlines()
     except:
-        await interaction.response.send_message("❌ Dosya okunamadı. UTF-8 formatında olduğundan emin olun.", ephemeral=True)
+        await interaction.response.send_message("❌ UTF-8 kodlaması ile okunamadı.", ephemeral=True)
         return
 
     sayac = 0
@@ -168,14 +185,16 @@ async def dosyaileekle(interaction: discord.Interaction, platform: str, tip: str
             sayac += 1
 
     await interaction.response.send_message(
-        f"✅ {sayac} adet hesap başarıyla **{platform}** → **{tip}** stoklarına eklendi.",
+        f"✅ {sayac} adet hesap **{platform} → {tip}** stoklarına eklendi.",
         ephemeral=True
     )
 
+# Bot hazır olduğunda
 @bot.event
 async def on_ready():
     await tree.sync()
     print(f"{bot.user} olarak giriş yapıldı!")
 
+# Çalıştır
 keep_alive()
 bot.run(TOKEN)
