@@ -63,8 +63,9 @@ async def clear(ctx, amount: int):
     deleted = await ctx.channel.purge(limit=amount + 1)
     await ctx.send(f'{len(deleted)} mesaj silindi.🧹', delete_after=5)
 
+# ✅ HATA BURADAYDI — async olarak düzeltilmiş hali:
 @clear.error
-def clear_error(ctx, error):
+async def clear_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send('Yönetici olmalısın.🧑‍💼')
 
@@ -127,6 +128,7 @@ async def yardım(ctx):
     embed.add_field(name="vroll", value="Zar atar.", inline=False)
     embed.add_field(name="vping", value="Bot gecikmesini gösterir.", inline=False)
     await ctx.send(embed=embed)
+
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
 bot.run(token)
