@@ -1,9 +1,5 @@
 from dotenv import load_dotenv
 import os
-
-load_dotenv()
-token = os.getenv("DISCORD_TOKEN")
-bot.run(token)
 import discord
 import random
 import asyncio
@@ -131,3 +127,6 @@ async def yardım(ctx):
     embed.add_field(name="vroll", value="Zar atar.", inline=False)
     embed.add_field(name="vping", value="Bot gecikmesini gösterir.", inline=False)
     await ctx.send(embed=embed)
+load_dotenv()
+token = os.getenv("DISCORD_TOKEN")
+bot.run(token)
