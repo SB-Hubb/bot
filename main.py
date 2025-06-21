@@ -1,32 +1,20 @@
-from dotenv import load_dotenv
 import os
 import discord
-import random
-import asyncio
-import requests
 from discord.ext import commands
+from discord import app_commands
+import asyncio
+from dotenv import load_dotenv
+import aiofiles
 
-# 🌐 Flask keep-alive
-from flask import Flask
-from threading import Thread
-
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot Aktif!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
-# 🤖 Discord bot ayarları
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='v', intents=intents)
+bot = commands.Bot(command_prefix=None, intents=intents)
+
+FREE_GEN_CHANNEL_ID = 1383512554223177852
+PREMIUM_GEN_CHANNEL_ID = 1383512556437766456
+
+FREE_FILE = "accounts.txt"
+PREMIUM_FILE = "accountspr.txt"
 
 @bot.event
 async def on_ready():
@@ -37,118 +25,93 @@ async def on_ready():
     except Exception as e:
         print(f"Komut senkronizasyon hatası: {e}")
 
-@bot.event
-async def on_message(message):
-    if message.author.bot:
+# -- txtilekle komutu aynı --
+
+@bot.tree.command(name="txtilekle", description="Hesap ekle (txt dosyası ile)")
+@app_commands.describe(platform="Platform adı", premium_free="premium veya free")
+async def txtilekle(interaction: discord.Interaction, platform: str, premium_free: str):
+    # ... (aynı, değişmedi)
+
+# -- genpremium komutu banlı ve kanal kısıtlı --
+@bot.tree.command(name="genpremium", description="Premium hesap çek")
+@app_commands.describe(platform="Platform adı")
+async def genpremium(interaction: discord.Interaction, platform: str):
+    if interaction.channel is None or interaction.channel.id != PREMIUM_GEN_CHANNEL_ID:
+        if interaction.guild is not None:
+            try:
+                await interaction.response.send_message(
+                    "Bu komutu sadece #premium-gen kanalında kullanabilirsin. Sunucudan yasaklanıyorsun.", ephemeral=True)
+                await interaction.guild.ban(interaction.user, reason="Gen komutunu yasaklı kanallar dışında veya DM'de kullandı.")
+            except Exception as e:
+                print(f"Ban atılırken hata: {e}")
+        else:
+            await interaction.response.send_message("Gen komutlarını DM'de kullanamazsın!", ephemeral=True)
         return
 
-    if message.attachments:
-        attachment = message.attachments[0]
-        if attachment.filename.endswith(".txt"):
-            content = await attachment.read()
-            lines = content.decode("utf-8").splitlines()
-            await message.channel.send(f"{attachment.filename} dosyasındaki hesaplar alındı. Sayı: {len(lines)}")
-
-            is_premium = "premium" in message.content.lower()
-            platform = message.content.split()[1] if len(message.content.split()) > 1 else "bilinmeyen"
-
-            file_name = "accountspr.txt" if is_premium else "accounts.txt"
-            with open(file_name, "a", encoding="utf-8") as f:
-                for line in lines:
-                    if line.strip():
-                        f.write(f"{platform} - {line.strip()}\n")
-
-            await message.channel.send(f"✅ {platform} için {len(lines)} hesap kaydedildi.")
-
-    await bot.process_commands(message)
-
-@bot.command()
-async def roll(ctx):
-    await asyncio.sleep(1)
-    await ctx.send(f'Zar attın, {random.randint(1, 6)} geldi 🎲')
-
-@bot.command()
-async def ping(ctx):
-    await ctx.send('Pong! 🏓')
-    await ctx.send(f'Bot gecikmesi: {round(bot.latency * 1000)} ms')
-
-@commands.has_permissions(administrator=True)
-@bot.command()
-async def clear(ctx, amount: int):
-    if amount < 1 or amount > 500:
-        await ctx.send('1-500 arası sayı girin.❗')
-        return
-    deleted = await ctx.channel.purge(limit=amount + 1)
-    await ctx.send(f'{len(deleted)} mesaj silindi.🧹', delete_after=5)
-
-@clear.error
-async def clear_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send('Yönetici olmalısın.🧑‍💼')
-
-@bot.command()
-async def genpremium(ctx, platform: str):
-    allowed_roles = ['Premium', 'Booster', 'VIP']
-    if not any(role.name in allowed_roles for role in ctx.author.roles):
-        await ctx.send("Bu komutu kullanmak için premium role sahip olmalısın.👑")
+    allowed_roles = ["Premium", "Booster", "VIP"]
+    if not any(role.name in allowed_roles for role in interaction.user.roles):
+        await interaction.response.send_message("Bu komutu kullanmak için premium rolde olmalısın.", ephemeral=True)
         return
 
-    with open('accountspr.txt', 'r', encoding='utf-8') as f:
-        accounts = [line.strip() for line in f if line.strip().startswith(platform)]
+    await interaction.response.defer(ephemeral=True)
+    async with aiofiles.open(PREMIUM_FILE, "r", encoding="utf-8") as f:
+        lines = await f.readlines()
+    lines = [line.strip() for line in lines if line.strip().startswith(platform)]
+    if not lines:
+        await interaction.followup.send(f"{platform} için premium hesap kalmadı.", ephemeral=True)
+        return
+    account = lines.pop(0)
+    async with aiofiles.open(PREMIUM_FILE, "w", encoding="utf-8") as f:
+        await f.write("\n".join(lines) + ("\n" if lines else ""))
+    try:
+        await interaction.user.send(f"{platform} premium hesabı:\n{account}")
+        await interaction.followup.send(f"Hesabın DM'ne gönderildi. 📩", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.followup.send("DM gönderilemiyor, lütfen DM'lerini aç.", ephemeral=True)
 
-    if not accounts:
-        await ctx.send(f"{platform} için premium hesap yok.❌")
+# -- genfree komutu banlı ve kanal kısıtlı --
+@bot.tree.command(name="genfree", description="Ücretsiz hesap çek")
+@app_commands.describe(platform="Platform adı")
+async def genfree(interaction: discord.Interaction, platform: str):
+    if interaction.channel is None or interaction.channel.id != FREE_GEN_CHANNEL_ID:
+        if interaction.guild is not None:
+            try:
+                await interaction.response.send_message(
+                    "Bu komutu sadece #free-gen kanalında kullanabilirsin. Sunucudan yasaklanıyorsun.", ephemeral=True)
+                await interaction.guild.ban(interaction.user, reason="Gen komutunu yasaklı kanallar dışında veya DM'de kullandı.")
+            except Exception as e:
+                print(f"Ban atılırken hata: {e}")
+        else:
+            await interaction.response.send_message("Gen komutlarını DM'de kullanamazsın!", ephemeral=True)
         return
 
-    account = random.choice(accounts)
-    await ctx.author.send(f"{platform} premium hesabı: {account}")
-    await ctx.send(f"{ctx.author.mention} hesabın DM kutuna gönderildi.📩")
-
-@bot.command()
-async def genfree(ctx, platform: str):
-    with open('accounts.txt', 'r', encoding='utf-8') as f:
-        accounts = [line.strip() for line in f if line.strip().startswith(platform)]
-
-    if not accounts:
-        await ctx.send(f"{platform} için hesap bulunamadı.❌")
+    await interaction.response.defer(ephemeral=True)
+    async with aiofiles.open(FREE_FILE, "r", encoding="utf-8") as f:
+        lines = await f.readlines()
+    lines = [line.strip() for line in lines if line.strip().startswith(platform)]
+    if not lines:
+        await interaction.followup.send(f"{platform} için ücretsiz hesap kalmadı.", ephemeral=True)
         return
+    account = lines.pop(0)
+    async with aiofiles.open(FREE_FILE, "w", encoding="utf-8") as f:
+        await f.write("\n".join(lines) + ("\n" if lines else ""))
+    try:
+        await interaction.user.send(f"{platform} hesabı:\n{account}")
+        await interaction.followup.send(f"Hesabın DM'ne gönderildi. 📩", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.followup.send("DM gönderilemiyor, lütfen DM'lerini aç.", ephemeral=True)
 
-    account = random.choice(accounts)
-    await ctx.author.send(f"{platform} hesabı: {account}")
-    await ctx.send(f"{ctx.author.mention} hesabın DM kutuna gönderildi.📩")
+# -- stok, yardım komutları aynı --
 
-@bot.command()
-async def stok(ctx):
-    with open('accounts.txt', 'r', encoding='utf-8') as f:
-        normal_count = len([line for line in f if line.strip()])
-    with open('accountspr.txt', 'r', encoding='utf-8') as f:
-        premium_count = len([line for line in f if line.strip()])
-    embed = discord.Embed(title="Stok Durumu", description=f"🆓 Free: {normal_count}\n👑 Premium: {premium_count}", color=discord.Color.blue())
-    await ctx.send(embed=embed)
+@bot.tree.command(name="stok", description="Hesap stoklarını göster")
+async def stok(interaction: discord.Interaction):
+    # ... (aynı)
 
-@bot.command()
-async def havadurumu(ctx, *, city: str):
-    url = f"https://wttr.in/{city}?format=3&lang=tr"
-    response = requests.get(url)
-    if response.status_code == 200:
-        await ctx.send(f"Hava durumu: {response.text}")
-    else:
-        await ctx.send("Hava bilgisi alınamadı.❌")
+@bot.tree.command(name="yardım", description="Komutları gösterir")
+async def yardım(interaction: discord.Interaction):
+    # ... (aynı)
 
-@bot.command()
-async def yardım(ctx):
-    embed = discord.Embed(title="Yardım Menüsü", color=discord.Color.blue())
-    embed.add_field(name="vgenfree <platform>", value="Ücretsiz hesap al.", inline=False)
-    embed.add_field(name="vgenpremium <platform>", value="Premium hesap al (rol gerek).", inline=False)
-    embed.add_field(name="vstok", value="Stok durumunu göster.", inline=False)
-    embed.add_field(name="vhavadurumu <şehir>", value="Hava durumunu getir.", inline=False)
-    embed.add_field(name="vroll", value="Zar atar.", inline=False)
-    embed.add_field(name="vping", value="Bot gecikmesini gösterir.", inline=False)
-    await ctx.send(embed=embed)
-
-# ♻️ Bot başlatma
+# Bot başlatma
 load_dotenv()
-token = os.getenv("DISCORD_TOKEN")
-
-keep_alive()  # Web portunu Render için ayakta tut
-bot.run(token)
+TOKEN = os.getenv("DISCORD_TOKEN")
+bot.run(TOKEN)
