@@ -6,6 +6,24 @@ import asyncio
 import requests
 from discord.ext import commands
 
+# 🌐 Flask keep-alive
+from flask import Flask
+from threading import Thread
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot Aktif!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# 🤖 Discord bot ayarları
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='v', intents=intents)
@@ -63,7 +81,6 @@ async def clear(ctx, amount: int):
     deleted = await ctx.channel.purge(limit=amount + 1)
     await ctx.send(f'{len(deleted)} mesaj silindi.🧹', delete_after=5)
 
-# ✅ HATA BURADAYDI — async olarak düzeltilmiş hali:
 @clear.error
 async def clear_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
@@ -129,6 +146,9 @@ async def yardım(ctx):
     embed.add_field(name="vping", value="Bot gecikmesini gösterir.", inline=False)
     await ctx.send(embed=embed)
 
+# ♻️ Bot başlatma
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
+
+keep_alive()  # Web portunu Render için ayakta tut
 bot.run(token)
