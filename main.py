@@ -5,6 +5,7 @@ from discord import app_commands
 import asyncio
 from dotenv import load_dotenv
 import aiofiles
+from collections import Counter  # platform stok sayımı için
 
 # Render için gerekli: Flask ve Threading
 from flask import Flask
@@ -34,6 +35,11 @@ PREMIUM_GEN_CHANNEL_ID = 1383512556437766456
 
 FREE_FILE = "accounts.txt"
 PREMIUM_FILE = "accountspr.txt"
+
+# Eksik dosyaları oluştur
+for filename in [FREE_FILE, PREMIUM_FILE]:
+    if not os.path.exists(filename):
+        open(filename, "w", encoding="utf-8").close()
 
 @bot.event
 async def on_ready():
@@ -151,20 +157,39 @@ async def genfree(interaction: discord.Interaction, platform: str):
 
 @bot.tree.command(name="stok", description="Hesap stoklarını göster")
 async def stok(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer()  # görünür mesaj
     try:
         async with aiofiles.open(FREE_FILE, "r", encoding="utf-8") as f:
             free_lines = await f.readlines()
         async with aiofiles.open(PREMIUM_FILE, "r", encoding="utf-8") as f:
             premium_lines = await f.readlines()
 
-        free_count = len([line for line in free_lines if line.strip() != ""])
-        premium_count = len([line for line in premium_lines if line.strip() != ""])
+        free_lines = [line.strip() for line in free_lines if line.strip()]
+        premium_lines = [line.strip() for line in premium_lines if line.strip()]
 
-        msg = f"**Stok Durumu:**\n• Ücretsiz Hesaplar: {free_count}\n• Premium Hesaplar: {premium_count}"
-        await interaction.followup.send(msg, ephemeral=True)
+        free_counter = Counter(line.split()[0] for line in free_lines)
+        premium_counter = Counter(line.split()[0] for line in premium_lines)
+
+        msg = "**📦 Stok Durumu**\n"
+
+        if free_counter:
+            msg += "\n🟦 **Ücretsiz Hesaplar:**\n"
+            for platform, count in free_counter.items():
+                msg += f"• `{platform}`: {count} adet\n"
+        else:
+            msg += "\n🟦 Ücretsiz hesap yok.\n"
+
+        if premium_counter:
+            msg += "\n🟨 **Premium Hesaplar:**\n"
+            for platform, count in premium_counter.items():
+                msg += f"• `{platform}`: {count} adet\n"
+        else:
+            msg += "\n🟨 Premium hesap yok.\n"
+
+        await interaction.followup.send(msg)
+
     except Exception as e:
-        await interaction.followup.send(f"Hata oluştu: {e}", ephemeral=True)
+        await interaction.followup.send(f"Hata oluştu: {e}")
 
 @bot.tree.command(name="yardım", description="Komutları gösterir")
 async def yardım(interaction: discord.Interaction):
@@ -173,7 +198,7 @@ async def yardım(interaction: discord.Interaction):
         "/txtilekle platform premium/free : Hesap ekle (.txt dosyası yükle)\n"
         "/genfree platform : Ücretsiz hesap çek\n"
         "/genpremium platform : Premium hesap çek (Premium rolü gerekli)\n"
-        "/stok : Hesap stoklarını göster\n"
+        "/stok : Hesap stoklarını platformlara göre gösterir\n"
         "/yardım : Bu mesajı gösterir"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
