@@ -25,13 +25,47 @@ async def on_ready():
     except Exception as e:
         print(f"Komut senkronizasyon hatası: {e}")
 
-# -- txtilekle komutu aynı (geçici pass ile) --
+# txtilekle komutu: platform ve premium/free bilgisine göre dosyaya hesap ekler
 @bot.tree.command(name="txtilekle", description="Hesap ekle (txt dosyası ile)")
 @app_commands.describe(platform="Platform adı", premium_free="premium veya free")
 async def txtilekle(interaction: discord.Interaction, platform: str, premium_free: str):
-    pass  # Buraya gerçek kodunu ekle
+    if premium_free.lower() not in ["premium", "free"]:
+        await interaction.response.send_message("premium veya free olarak belirtmelisin.", ephemeral=True)
+        return
 
-# -- genpremium komutu banlı ve kanal kısıtlı --
+    if premium_free.lower() == "premium":
+        dosya = PREMIUM_FILE
+    else:
+        dosya = FREE_FILE
+
+    await interaction.response.defer(ephemeral=True)
+
+    # Kullanıcının mesajına bağlı olarak dosyaya platform + hesap ekle
+    # Burada hesap ekleme mantığı çok basit: platform ile başlayacak şekilde yeni hesap eklenecek
+    # Kullanıcıdan tek satırlık hesap bilgisi bekleniyor
+    try:
+        # Hesap bilgisi al (kullanıcıdan mesaj bekle)
+        await interaction.followup.send(f"{platform} için `{premium_free}` hesap bilgisi gönder.")
+        
+        def check(m):
+            return m.author == interaction.user and m.channel == interaction.channel
+
+        msg = await bot.wait_for("message", check=check, timeout=60)
+        hesap = msg.content.strip()
+        if not hesap.startswith(platform):
+            hesap = f"{platform} {hesap}"
+
+        async with aiofiles.open(dosya, mode="a", encoding="utf-8") as f:
+            await f.write(hesap + "\n")
+
+        await interaction.followup.send(f"Hesap başarıyla `{dosya}` dosyasına eklendi.", ephemeral=True)
+
+    except asyncio.TimeoutError:
+        await interaction.followup.send("Hesap bilgisi zamanında alınamadı, işlem iptal edildi.", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"Hata oluştu: {e}", ephemeral=True)
+
+# genpremium komutu (senin gönderdiğin kod aynen)
 @bot.tree.command(name="genpremium", description="Premium hesap çek")
 @app_commands.describe(platform="Platform adı")
 async def genpremium(interaction: discord.Interaction, platform: str):
@@ -68,7 +102,7 @@ async def genpremium(interaction: discord.Interaction, platform: str):
     except discord.Forbidden:
         await interaction.followup.send("DM gönderilemiyor, lütfen DM'lerini aç.", ephemeral=True)
 
-# -- genfree komutu banlı ve kanal kısıtlı --
+# genfree komutu (senin gönderdiğin kod aynen)
 @bot.tree.command(name="genfree", description="Ücretsiz hesap çek")
 @app_commands.describe(platform="Platform adı")
 async def genfree(interaction: discord.Interaction, platform: str):
@@ -100,15 +134,36 @@ async def genfree(interaction: discord.Interaction, platform: str):
     except discord.Forbidden:
         await interaction.followup.send("DM gönderilemiyor, lütfen DM'lerini aç.", ephemeral=True)
 
-# -- stok komutu (geçici pass ile) --
+# stok komutu: dosyalardaki hesap sayısını gösterir
 @bot.tree.command(name="stok", description="Hesap stoklarını göster")
 async def stok(interaction: discord.Interaction):
-    pass  # Buraya gerçek kodunu ekle
+    await interaction.response.defer(ephemeral=True)
+    try:
+        async with aiofiles.open(FREE_FILE, "r", encoding="utf-8") as f:
+            free_lines = await f.readlines()
+        async with aiofiles.open(PREMIUM_FILE, "r", encoding="utf-8") as f:
+            premium_lines = await f.readlines()
 
-# -- yardım komutu (geçici pass ile) --
+        free_count = len([line for line in free_lines if line.strip() != ""])
+        premium_count = len([line for line in premium_lines if line.strip() != ""])
+
+        msg = f"**Stok Durumu:**\n• Ücretsiz Hesaplar: {free_count}\n• Premium Hesaplar: {premium_count}"
+        await interaction.followup.send(msg, ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"Hata oluştu: {e}", ephemeral=True)
+
+# yardım komutu: temel komut listesini gönderir
 @bot.tree.command(name="yardım", description="Komutları gösterir")
 async def yardım(interaction: discord.Interaction):
-    pass  # Buraya gerçek kodunu ekle
+    help_text = (
+        "**Komutlar:**\n"
+        "/txtilekle platform premium/free : Hesap ekle\n"
+        "/genfree platform : Ücretsiz hesap çek\n"
+        "/genpremium platform : Premium hesap çek (Premium rolü gerekli)\n"
+        "/stok : Hesap stoklarını göster\n"
+        "/yardım : Bu mesajı gösterir"
+    )
+    await interaction.response.send_message(help_text, ephemeral=True)
 
 # Bot başlatma
 load_dotenv()
