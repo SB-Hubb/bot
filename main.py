@@ -44,7 +44,7 @@ async def on_ready():
     except Exception as e:
         print(f"Komut senkronizasyon hatası: {e}")
 
-@bot.tree.command(name="txtilekle", description="Hesap ekle (txt dosyası ile)")
+@bot.tree.command(name="txtilekle", description="Hesap ekle (.txt dosyası ile)")
 @app_commands.describe(platform="Platform adı", premium_free="premium veya free")
 async def txtilekle(interaction: discord.Interaction, platform: str, premium_free: str):
     if premium_free.lower() not in ["premium", "free"]:
@@ -55,23 +55,30 @@ async def txtilekle(interaction: discord.Interaction, platform: str, premium_fre
     await interaction.response.defer(ephemeral=True)
 
     try:
-        await interaction.followup.send(f"{platform} için `{premium_free}` hesap bilgisi gönder.")
+        await interaction.followup.send(f"{platform} için `{premium_free}` hesap dosyasını (.txt) bu kanala gönder. (1 dakika süren var)")
 
         def check(m):
-            return m.author == interaction.user and m.channel == interaction.channel
+            return (
+                m.author == interaction.user and 
+                m.channel == interaction.channel and 
+                m.attachments and 
+                m.attachments[0].filename.endswith(".txt")
+            )
 
         msg = await bot.wait_for("message", check=check, timeout=60)
-        hesap = msg.content.strip()
-        if not hesap.startswith(platform):
-            hesap = f"{platform} {hesap}"
+        attachment = msg.attachments[0]
+        content = await attachment.read()
+        lines = content.decode("utf-8").splitlines()
+
+        lines = [f"{platform} {line.strip()}" for line in lines if line.strip() != ""]
 
         async with aiofiles.open(dosya, mode="a", encoding="utf-8") as f:
-            await f.write(hesap + "\n")
+            await f.write("\n".join(lines) + "\n")
 
-        await interaction.followup.send(f"Hesap başarıyla `{dosya}` dosyasına eklendi.", ephemeral=True)
+        await interaction.followup.send(f"{len(lines)} hesap başarıyla `{dosya}` dosyasına eklendi.", ephemeral=True)
 
     except asyncio.TimeoutError:
-        await interaction.followup.send("Hesap bilgisi zamanında alınamadı, işlem iptal edildi.", ephemeral=True)
+        await interaction.followup.send("Dosya zamanında gönderilmedi, işlem iptal edildi.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"Hata oluştu: {e}", ephemeral=True)
 
@@ -163,7 +170,7 @@ async def stok(interaction: discord.Interaction):
 async def yardım(interaction: discord.Interaction):
     help_text = (
         "**Komutlar:**\n"
-        "/txtilekle platform premium/free : Hesap ekle\n"
+        "/txtilekle platform premium/free : Hesap ekle (.txt dosyası yükle)\n"
         "/genfree platform : Ücretsiz hesap çek\n"
         "/genpremium platform : Premium hesap çek (Premium rolü gerekli)\n"
         "/stok : Hesap stoklarını göster\n"
