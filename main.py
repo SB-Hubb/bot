@@ -6,6 +6,25 @@ import asyncio
 from dotenv import load_dotenv
 import aiofiles
 
+# Render için gerekli: Flask ve Threading
+from flask import Flask
+from threading import Thread
+
+# Flask sunucusunu başlat (Render için)
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot aktif!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# Discord bot ayarları
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=None, intents=intents)
@@ -25,7 +44,6 @@ async def on_ready():
     except Exception as e:
         print(f"Komut senkronizasyon hatası: {e}")
 
-# txtilekle komutu: platform ve premium/free bilgisine göre dosyaya hesap ekler
 @bot.tree.command(name="txtilekle", description="Hesap ekle (txt dosyası ile)")
 @app_commands.describe(platform="Platform adı", premium_free="premium veya free")
 async def txtilekle(interaction: discord.Interaction, platform: str, premium_free: str):
@@ -33,20 +51,12 @@ async def txtilekle(interaction: discord.Interaction, platform: str, premium_fre
         await interaction.response.send_message("premium veya free olarak belirtmelisin.", ephemeral=True)
         return
 
-    if premium_free.lower() == "premium":
-        dosya = PREMIUM_FILE
-    else:
-        dosya = FREE_FILE
-
+    dosya = PREMIUM_FILE if premium_free.lower() == "premium" else FREE_FILE
     await interaction.response.defer(ephemeral=True)
 
-    # Kullanıcının mesajına bağlı olarak dosyaya platform + hesap ekle
-    # Burada hesap ekleme mantığı çok basit: platform ile başlayacak şekilde yeni hesap eklenecek
-    # Kullanıcıdan tek satırlık hesap bilgisi bekleniyor
     try:
-        # Hesap bilgisi al (kullanıcıdan mesaj bekle)
         await interaction.followup.send(f"{platform} için `{premium_free}` hesap bilgisi gönder.")
-        
+
         def check(m):
             return m.author == interaction.user and m.channel == interaction.channel
 
@@ -65,7 +75,6 @@ async def txtilekle(interaction: discord.Interaction, platform: str, premium_fre
     except Exception as e:
         await interaction.followup.send(f"Hata oluştu: {e}", ephemeral=True)
 
-# genpremium komutu (senin gönderdiğin kod aynen)
 @bot.tree.command(name="genpremium", description="Premium hesap çek")
 @app_commands.describe(platform="Platform adı")
 async def genpremium(interaction: discord.Interaction, platform: str):
@@ -102,7 +111,6 @@ async def genpremium(interaction: discord.Interaction, platform: str):
     except discord.Forbidden:
         await interaction.followup.send("DM gönderilemiyor, lütfen DM'lerini aç.", ephemeral=True)
 
-# genfree komutu (senin gönderdiğin kod aynen)
 @bot.tree.command(name="genfree", description="Ücretsiz hesap çek")
 @app_commands.describe(platform="Platform adı")
 async def genfree(interaction: discord.Interaction, platform: str):
@@ -134,7 +142,6 @@ async def genfree(interaction: discord.Interaction, platform: str):
     except discord.Forbidden:
         await interaction.followup.send("DM gönderilemiyor, lütfen DM'lerini aç.", ephemeral=True)
 
-# stok komutu: dosyalardaki hesap sayısını gösterir
 @bot.tree.command(name="stok", description="Hesap stoklarını göster")
 async def stok(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -152,7 +159,6 @@ async def stok(interaction: discord.Interaction):
     except Exception as e:
         await interaction.followup.send(f"Hata oluştu: {e}", ephemeral=True)
 
-# yardım komutu: temel komut listesini gönderir
 @bot.tree.command(name="yardım", description="Komutları gösterir")
 async def yardım(interaction: discord.Interaction):
     help_text = (
@@ -168,4 +174,9 @@ async def yardım(interaction: discord.Interaction):
 # Bot başlatma
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+# Keep-alive başlat
+keep_alive()
+
+# Bot çalıştır
 bot.run(TOKEN)
