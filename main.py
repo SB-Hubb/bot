@@ -25,12 +25,11 @@ async def on_ready():
     except Exception as e:
         print(f"Komut senkronizasyon hatası: {e}")
 
-# -- txtilekle komutu aynı --
-
+# -- txtilekle komutu aynı (geçici pass ile) --
 @bot.tree.command(name="txtilekle", description="Hesap ekle (txt dosyası ile)")
 @app_commands.describe(platform="Platform adı", premium_free="premium veya free")
 async def txtilekle(interaction: discord.Interaction, platform: str, premium_free: str):
-    # ... (aynı, değişmedi)
+    pass  # Buraya gerçek kodunu ekle
 
 # -- genpremium komutu banlı ve kanal kısıtlı --
 @bot.tree.command(name="genpremium", description="Premium hesap çek")
@@ -101,15 +100,15 @@ async def genfree(interaction: discord.Interaction, platform: str):
     except discord.Forbidden:
         await interaction.followup.send("DM gönderilemiyor, lütfen DM'lerini aç.", ephemeral=True)
 
-# -- stok, yardım komutları aynı --
-
+# -- stok komutu (geçici pass ile) --
 @bot.tree.command(name="stok", description="Hesap stoklarını göster")
 async def stok(interaction: discord.Interaction):
-    # ... (aynı)
+    pass  # Buraya gerçek kodunu ekle
 
+# -- yardım komutu (geçici pass ile) --
 @bot.tree.command(name="yardım", description="Komutları gösterir")
 async def yardım(interaction: discord.Interaction):
-    # ... (aynı)
+    pass  # Buraya gerçek kodunu ekle
 
 # Bot başlatma
 load_dotenv()
