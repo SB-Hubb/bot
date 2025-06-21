@@ -36,6 +36,12 @@ PREMIUM_GEN_CHANNEL_ID = 1383512556437766456
 FREE_FILE = "accounts.txt"
 PREMIUM_FILE = "accountspr.txt"
 
+# Admin ID'leri buraya ekle (int tipinde)
+ADMIN_IDS = [
+    1284167857231364118,  # Örnek ID, bunu kendi ID'n ile değiştir
+    1230072380467056710,
+]
+
 # Eksik dosyaları oluştur
 for filename in [FREE_FILE, PREMIUM_FILE]:
     if not os.path.exists(filename):
@@ -53,6 +59,10 @@ async def on_ready():
 @bot.tree.command(name="txtilekle", description="Hesap ekle (.txt dosyası ile)")
 @app_commands.describe(platform="Platform adı", premium_free="premium veya free")
 async def txtilekle(interaction: discord.Interaction, platform: str, premium_free: str):
+    if interaction.user.id not in ADMIN_IDS:
+        await interaction.response.send_message("❌ Bu komutu sadece yetkili adminler kullanabilir.", ephemeral=True)
+        return
+
     if premium_free.lower() not in ["premium", "free"]:
         await interaction.response.send_message("premium veya free olarak belirtmelisin.", ephemeral=True)
         return
@@ -87,6 +97,8 @@ async def txtilekle(interaction: discord.Interaction, platform: str, premium_fre
         await interaction.followup.send("Dosya zamanında gönderilmedi, işlem iptal edildi.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"Hata oluştu: {e}", ephemeral=True)
+
+# Diğer komutların aynen devamı (genpremium, genfree, stok, yardım)...
 
 @bot.tree.command(name="genpremium", description="Premium hesap çek")
 @app_commands.describe(platform="Platform adı")
